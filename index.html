@@ -1,0 +1,394 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<title>座席表</title>
+<style>
+:root{
+  --bg:#f4f7fb; --panel:#ffffff; --ink:#1b2430; --sub:#5b6878; --line:#c9d3e0;
+  --accent:#2563b0; --accent-soft:#e3edf9; --desk:#eef3fa; --empty:#9aa6b5; --sel:#f5b301;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#111720; --panel:#1a2230; --ink:#e6ecf3; --sub:#9aa7b8; --line:#33415a;
+    --accent:#6ea8ff; --accent-soft:#1f3150; --desk:#1f2a3b; --empty:#64728a; --sel:#f5b301;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#111720; --panel:#1a2230; --ink:#e6ecf3; --sub:#9aa7b8; --line:#33415a;
+  --accent:#6ea8ff; --accent-soft:#1f3150; --desk:#1f2a3b; --empty:#64728a; --sel:#f5b301;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:"Hiragino Sans","Noto Sans JP","Yu Gothic UI","Meiryo",sans-serif;font-size:15px;line-height:1.5;-webkit-text-size-adjust:100%}
+button,input,textarea,select{font:inherit;color:inherit}
+button{cursor:pointer;border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:8px 12px}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.wrap{max-width:1100px;margin:0 auto;padding:12px 16px 40px}
+.toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px}
+.toolbar .spacer{flex:1}
+.toolbar label{display:flex;align-items:center;gap:4px;color:var(--sub);font-size:14px}
+.toolbar select{padding:6px;border:1px solid var(--line);border-radius:8px;background:var(--panel)}
+.status{color:var(--sub);font-size:14px}
+
+/* ---- 座席表(画面・印刷共通) ---- */
+.sheet{background:#fff;color:#111;border-radius:10px;padding:12px;box-shadow:0 1px 4px rgba(0,0,0,.12)}
+.head{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 16px;margin-bottom:8px}
+.head [contenteditable]{outline:none;border-bottom:1px dashed #b8c4d4;min-width:3em}
+.head .title{font-size:20px;font-weight:700}
+.head .meta{font-size:14px;color:#333}
+.chart{display:grid;grid-template-columns:repeat(4,1fr);column-gap:14px;row-gap:10px;
+  grid-template-rows:auto repeat(5,minmax(96px,auto))}
+.chart.flipped{grid-template-rows:repeat(5,minmax(96px,auto)) auto}
+.teacher{grid-column:2 / span 2;justify-self:center;border:2px solid #333;border-radius:4px;padding:4px 32px;font-weight:700;letter-spacing:.3em}
+.desk{border:2px solid #2b3a4f;border-radius:4px;display:flex;flex-direction:column;background:#fff}
+.desk .dname{font-size:12px;font-weight:700;text-align:center;border-bottom:1px solid #2b3a4f;background:#eef3fa;line-height:1.5}
+.desk .seats{flex:1;display:grid;grid-template-columns:repeat(3,1fr)}
+.seat{position:relative;border-left:1px solid #9fb0c6;display:flex;flex-direction:column;align-items:center;padding:2px 1px;min-width:0;cursor:pointer}
+.seat:first-child{border-left:none}
+.seat .no{font-size:10px;color:#555;line-height:1.2}
+.seat .nm{flex:1;width:100%;container-type:size;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.seat .nm span{white-space:nowrap;font-weight:600;line-height:1.1}
+.seat.empty .nm span{color:#aab3c0;font-weight:400}
+.seat.target{background:#fff6d6}
+/* 縦書き */
+.vertical .seat .nm span{writing-mode:vertical-rl;font-size:min(15px, calc(94cqh / var(--n)), 85cqw)}
+/* 横書き */
+.horizontal .seat .nm span{font-size:min(15px, calc(96cqw / var(--n)), 60cqh)}
+.flip-note{font-size:11px;color:#555;text-align:right;margin-top:4px}
+
+/* ---- 名簿 ---- */
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px;margin-top:14px}
+.panel h2{font-size:16px;margin:0 0 8px}
+.roster{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px}
+.stu{display:flex;gap:6px;align-items:center;border:1px solid var(--line);border-radius:8px;padding:6px 8px;cursor:pointer;background:var(--panel)}
+.stu .n{color:var(--sub);font-size:12px;min-width:2em}
+.stu .s{margin-left:auto;font-size:12px;color:var(--accent);font-weight:700}
+.stu.unseated .s{color:var(--empty);font-weight:400}
+.stu.selected{border-color:var(--sel);box-shadow:0 0 0 2px var(--sel) inset}
+.hint{color:var(--sub);font-size:13px;margin:4px 0 8px}
+
+/* ---- 小窓 ---- */
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:flex-end;justify-content:center;z-index:10}
+.modal.open{display:flex}
+.box{background:var(--panel);color:var(--ink);width:100%;max-width:560px;max-height:85vh;border-radius:14px 14px 0 0;padding:14px 16px;display:flex;flex-direction:column;gap:8px}
+@media (min-width:700px){.modal{align-items:center}.box{border-radius:14px}}
+.box h3{margin:0;font-size:17px}
+.box input[type=search],.box textarea{width:100%;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--bg)}
+.box textarea{min-height:240px;font-family:inherit}
+.list{overflow:auto;flex:1;border:1px solid var(--line);border-radius:8px}
+.list button{display:flex;width:100%;border:none;border-bottom:1px solid var(--line);border-radius:0;text-align:left;gap:8px;padding:10px}
+.list button .s{margin-left:auto;color:var(--sub);font-size:13px}
+.list button.free .s{color:var(--accent)}
+.row{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+
+/* ---- 印刷 ---- */
+@page{size:A4 portrait;margin:10mm}
+@media print{
+  body{background:#fff}
+  .noprint{display:none !important}
+  .wrap{max-width:none;padding:0}
+  .sheet{box-shadow:none;border-radius:0;padding:0}
+  .head [contenteditable]{border-bottom:none}
+  .seat.target{background:none}
+  .chart{height:var(--print-h);grid-template-rows:auto repeat(5,1fr);column-gap:7mm;row-gap:4mm}
+  .chart.flipped{grid-template-rows:repeat(5,1fr) auto}
+  .vertical .seat .nm span{font-size:min(17pt, calc(94cqh / var(--n)), 85cqw)}
+  .horizontal .seat .nm span{font-size:min(14pt, calc(96cqw / var(--n)), 60cqh)}
+  .seat .no{font-size:8pt}
+  *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+}
+</style>
+<style id="pagestyle"></style>
+</head>
+<body>
+<div class="wrap">
+  <div class="toolbar noprint">
+    <button class="primary" id="btnRoster">名簿を入れる</button>
+    <button id="btnPrint">印刷(A4)</button>
+    <label>用紙
+      <select id="optPaper"><option value="portrait">A4 縦</option><option value="landscape">A4 横</option></select>
+    </label>
+    <label>名前
+      <select id="optWrite"><option value="vertical">縦書き</option><option value="horizontal">横書き</option></select>
+    </label>
+    <label>向き
+      <select id="optFlip"><option value="0">教卓が上</option><option value="1">教卓が下(先生から見た図)</option></select>
+    </label>
+    <span class="spacer"></span>
+    <button id="btnSave">控えを保存</button>
+    <button id="btnLoad">控えを開く</button>
+    <button id="btnClear">席を全部空ける</button>
+    <input type="file" id="fileIn" accept=".json,application/json" hidden>
+  </div>
+
+  <div class="sheet" id="sheet">
+    <div class="head">
+      <span class="title" contenteditable="true" id="hTitle">座席表</span>
+      <span class="meta">クラス:<span contenteditable="true" id="hClass"></span></span>
+      <span class="meta">日付:<span contenteditable="true" id="hDate"></span></span>
+    </div>
+    <div class="chart vertical" id="chart"></div>
+  </div>
+
+  <div class="panel noprint">
+    <h2>名簿 <span class="status" id="count"></span></h2>
+    <div class="hint">生徒をタップして選び、座席表の席をタップすると、その席に入ります。席を先にタップして、一覧から選ぶこともできます。</div>
+    <div class="roster" id="roster"></div>
+  </div>
+</div>
+
+<!-- 名簿の入力 -->
+<div class="modal noprint" id="mRoster">
+  <div class="box">
+    <h3>名簿を入れる</h3>
+    <div class="hint">1行に1人。「番号 名前」または名前だけ(番号は上から1, 2, 3…)。Excel の2列(番号・名前)をそのまま貼り付けても読めます。番号が同じ生徒の席はそのまま残ります。</div>
+    <textarea id="taRoster" placeholder="1 青木 一郎&#10;2 石川 花子&#10;3 上田 次郎"></textarea>
+    <div class="row">
+      <button id="rCancel">やめる</button>
+      <button class="primary" id="rOk">読み込む</button>
+    </div>
+  </div>
+</div>
+
+<!-- 席に生徒を選ぶ -->
+<div class="modal noprint" id="mPick">
+  <div class="box">
+    <h3 id="pTitle">席</h3>
+    <input type="search" id="pSearch" placeholder="名前・番号でさがす">
+    <div class="list" id="pList"></div>
+    <div class="row">
+      <button id="pClear">この席を空ける</button>
+      <button id="pCancel">閉じる</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  var DESKS = { A:4, B:5, C:5, D:4 };
+  var COLS = ["A","B","C","D"];
+  var KEY = "seating-chart-v1";
+
+  var state = { students:[], seats:{}, title:"座席表", klass:"", date:"",
+                paper:"portrait", write:"vertical", flip:"0" };
+  var selected = null;   // 選択中の生徒番号
+  var picking = null;    // 生徒を選んでいる席
+
+  function $(id){ return document.getElementById(id); }
+  function save(){ try{ localStorage.setItem(KEY, JSON.stringify(state)); }catch(e){} }
+  function load(){
+    try{ var s = JSON.parse(localStorage.getItem(KEY)||"null"); if(s && s.students) state = Object.assign(state, s); }catch(e){}
+  }
+  function stuByNo(no){ for(var i=0;i<state.students.length;i++) if(state.students[i].no===no) return state.students[i]; return null; }
+  function seatOf(no){ for(var k in state.seats) if(state.seats[k]===no) return k; return null; }
+  function seatLabel(k){ var p=k.split("-"); return p[0]+" の"+["左","中","右"][+p[1]-1]; }
+
+  // 生徒を席へ。席にいた人は、入ってきた人の元の席へ入れ替わる
+  function assign(seat, no){
+    var from = seatOf(no), prev = state.seats[seat];
+    if(from===seat) return;
+    if(from) delete state.seats[from];
+    state.seats[seat] = no;
+    if(prev && from) state.seats[from] = prev;
+    save(); render();
+  }
+
+  function render(){
+    var flip = state.flip==="1";
+    var chart = $("chart");
+    chart.className = "chart " + state.write;
+    chart.innerHTML = "";
+    var t = document.createElement("div");
+    t.className = "teacher"; t.textContent = "教卓";
+    t.style.gridRow = flip ? 6 : 1;
+    chart.classList.toggle("flipped", flip);
+    chart.appendChild(t);
+
+    COLS.forEach(function(c, ci){
+      for(var r=1;r<=DESKS[c];r++){
+        var d = document.createElement("div");
+        d.className = "desk";
+        d.style.gridColumn = (flip ? 4-ci : ci+1);
+        d.style.gridRow = flip ? (6-r) : (r+1);
+        var nm = document.createElement("div");
+        nm.className = "dname"; nm.textContent = c + r;
+        var seats = document.createElement("div"); seats.className = "seats";
+        var order = flip ? [3,2,1] : [1,2,3];
+        order.forEach(function(p){
+          var key = c + r + "-" + p;
+          var s = document.createElement("div");
+          var no = state.seats[key], st = no ? stuByNo(no) : null;
+          s.className = "seat" + (st ? "" : " empty");
+          s.dataset.seat = key;
+          var n1 = document.createElement("div"); n1.className="no"; n1.textContent = st ? st.no : " ";
+          var n2 = document.createElement("div"); n2.className="nm";
+          var sp = document.createElement("span");
+          var text = st ? st.name : "空";
+          sp.textContent = text;
+          sp.style.setProperty("--n", Math.max(text.length, 2));
+          n2.appendChild(sp);
+          s.appendChild(n1); s.appendChild(n2);
+          seats.appendChild(s);
+        });
+        d.appendChild(nm); d.appendChild(seats);
+        chart.appendChild(d);
+      }
+    });
+    if(selected) chart.querySelectorAll(".seat").forEach(function(el){ el.classList.add("target"); });
+
+    // 名簿
+    var ro = $("roster"); ro.innerHTML = "";
+    var seated = 0;
+    state.students.forEach(function(st){
+      var k = seatOf(st.no); if(k) seated++;
+      var b = document.createElement("div");
+      b.className = "stu" + (k ? "" : " unseated") + (selected===st.no ? " selected" : "");
+      b.dataset.no = st.no;
+      b.innerHTML = '<span class="n"></span><span class="m"></span><span class="s"></span>';
+      b.children[0].textContent = st.no;
+      b.children[1].textContent = st.name;
+      b.children[2].textContent = k ? seatLabel(k) : "未定";
+      ro.appendChild(b);
+    });
+    $("count").textContent = state.students.length
+      ? "(" + state.students.length + "人中 " + seated + "人の席が決まっています)"
+      : "(まだ名簿がありません)";
+
+    $("hTitle").textContent = state.title;
+    $("hClass").textContent = state.klass;
+    $("hDate").textContent = state.date;
+    $("optPaper").value = state.paper; $("optWrite").value = state.write; $("optFlip").value = state.flip;
+    $("pagestyle").textContent = "@page{size:A4 " + state.paper + ";margin:10mm}" +
+      ":root{--print-h:" + (state.paper==="portrait" ? "250mm" : "165mm") + "}";
+  }
+
+  // ---- 名簿の読み込み ----
+  function parseRoster(text){
+    var out = [], used = {}, auto = 1;
+    text.split(/\r?\n/).forEach(function(line){
+      line = line.replace(/^\s+|\s+$/g, "");
+      if(!line) return;
+      var m = line.match(/^(\d+)[\s,、\t.:]+(.+)$/);
+      var no, name;
+      if(m){ no = m[1]; name = m[2]; } else { no = String(auto); name = line; }
+      name = name.replace(/[\t,]+/g, " ").replace(/\s+/g, " ").trim();
+      while(used[no]) no = String(+no + 1);
+      used[no] = true; auto = +no + 1;
+      out.push({ no:no, name:name });
+    });
+    return out;
+  }
+  $("btnRoster").onclick = function(){
+    $("taRoster").value = state.students.map(function(s){ return s.no + " " + s.name; }).join("\n");
+    $("mRoster").classList.add("open");
+  };
+  $("rCancel").onclick = function(){ $("mRoster").classList.remove("open"); };
+  $("rOk").onclick = function(){
+    var list = parseRoster($("taRoster").value);
+    if(list.length > 54 && !confirm(list.length + "人います。席は54席です。このまま読み込みますか?")) return;
+    state.students = list;
+    var nos = {}; list.forEach(function(s){ nos[s.no]=1; });
+    for(var k in state.seats) if(!nos[state.seats[k]]) delete state.seats[k];
+    selected = null; save(); render();
+    $("mRoster").classList.remove("open");
+  };
+
+  // ---- 名簿の生徒をタップ ----
+  $("roster").addEventListener("click", function(e){
+    var b = e.target.closest(".stu"); if(!b) return;
+    selected = (selected===b.dataset.no) ? null : b.dataset.no;
+    render();
+  });
+
+  // ---- 席をタップ ----
+  $("chart").addEventListener("click", function(e){
+    var s = e.target.closest(".seat"); if(!s) return;
+    if(selected){ var no = selected; selected = null; assign(s.dataset.seat, no); return; }
+    openPicker(s.dataset.seat);
+  });
+
+  function openPicker(seat){
+    picking = seat;
+    var cur = state.seats[seat], st = cur ? stuByNo(cur) : null;
+    $("pTitle").textContent = seatLabel(seat) + (st ? "(いま:" + st.no + " " + st.name + ")" : "(空き)");
+    $("pSearch").value = "";
+    fillPick("");
+    $("mPick").classList.add("open");
+  }
+  function fillPick(q){
+    var list = $("pList"); list.innerHTML = "";
+    var arr = state.students.slice().sort(function(a,b){
+      var fa = seatOf(a.no)?1:0, fb = seatOf(b.no)?1:0;
+      return fa-fb || (+a.no)-(+b.no);
+    });
+    arr.forEach(function(st){
+      if(q && (st.name + " " + st.no).indexOf(q) < 0) return;
+      var k = seatOf(st.no);
+      var b = document.createElement("button");
+      b.className = k ? "" : "free";
+      b.innerHTML = '<span></span><span></span><span class="s"></span>';
+      b.children[0].textContent = st.no;
+      b.children[1].textContent = st.name;
+      b.children[2].textContent = k ? seatLabel(k) + "(入れ替え)" : "未定";
+      b.onclick = function(){ $("mPick").classList.remove("open"); assign(picking, st.no); };
+      list.appendChild(b);
+    });
+    if(!state.students.length) list.innerHTML = '<div class="hint" style="padding:10px">先に「名簿を入れる」から名簿を入れてください。</div>';
+  }
+  $("pSearch").oninput = function(){ fillPick(this.value.trim()); };
+  $("pClear").onclick = function(){ delete state.seats[picking]; save(); render(); $("mPick").classList.remove("open"); };
+  $("pCancel").onclick = function(){ $("mPick").classList.remove("open"); };
+  document.querySelectorAll(".modal").forEach(function(m){
+    m.addEventListener("click", function(e){ if(e.target===m) m.classList.remove("open"); });
+  });
+
+  // ---- 見出し・設定 ----
+  [["hTitle","title"],["hClass","klass"],["hDate","date"]].forEach(function(p){
+    $(p[0]).addEventListener("input", function(){ state[p[1]] = this.textContent; save(); });
+    $(p[0]).addEventListener("keydown", function(e){ if(e.key==="Enter"){ e.preventDefault(); this.blur(); } });
+  });
+  $("optPaper").onchange = function(){ state.paper = this.value; save(); render(); };
+  $("optWrite").onchange = function(){ state.write = this.value; save(); render(); };
+  $("optFlip").onchange  = function(){ state.flip  = this.value; save(); render(); };
+  $("btnPrint").onclick = function(){
+    selected = null; render();
+    if(window.AndroidApp) AndroidApp.print(state.paper, state.title + (state.klass ? " " + state.klass : ""));
+    else window.print();
+  };
+  $("btnClear").onclick = function(){
+    if(confirm("すべての席を空けます。名簿は残ります。よろしいですか?")){ state.seats = {}; save(); render(); }
+  };
+
+  // ---- 控え(ファイル)の保存と読み込み ----
+  $("btnSave").onclick = function(){
+    var fname = "座席表_" + (state.klass || "クラス") + ".json";
+    if(window.AndroidApp){ AndroidApp.saveFile(fname, JSON.stringify(state, null, 1)); return; }
+    var blob = new Blob([JSON.stringify(state, null, 1)], {type:"application/json"});
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = fname;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function(){ URL.revokeObjectURL(a.href); }, 2000);
+  };
+  $("btnLoad").onclick = function(){ $("fileIn").click(); };
+  $("fileIn").onchange = function(){
+    var f = this.files[0]; if(!f) return;
+    var rd = new FileReader();
+    rd.onload = function(){
+      try{ var s = JSON.parse(rd.result); if(!s.students) throw 0; state = Object.assign(state, s); selected=null; save(); render(); }
+      catch(e){ alert("この控えは読めませんでした。"); }
+    };
+    rd.readAsText(f); this.value = "";
+  };
+
+  if(!state.date){ var d = new Date(); state.date = d.getFullYear()+"年"+(d.getMonth()+1)+"月"+d.getDate()+"日"; }
+  load(); render();
+})();
+</script>
+</body>
+</html>
