@@ -49,7 +49,7 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
 .desk .seats{flex:1;display:grid;grid-template-columns:repeat(3,1fr)}
 .seat{position:relative;border-left:1px solid #9fb0c6;display:flex;flex-direction:column;align-items:center;padding:2px 1px;min-width:0;cursor:pointer}
 .seat:first-child{border-left:none}
-.seat .no{font-size:10px;color:#555;line-height:1.2}
+.seat .gr{font-size:11px;color:#333;line-height:1.3;white-space:nowrap}
 .seat .nm{flex:1;width:100%;container-type:size;display:flex;align-items:center;justify-content:center;overflow:hidden}
 .seat .nm span{white-space:nowrap;font-weight:600;line-height:1.1}
 .seat.empty .nm span{color:#aab3c0;font-weight:400}
@@ -66,6 +66,7 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
 .roster{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px}
 .stu{display:flex;gap:6px;align-items:center;border:1px solid var(--line);border-radius:8px;padding:6px 8px;cursor:pointer;background:var(--panel)}
 .stu .n{color:var(--sub);font-size:12px;min-width:2em}
+.stu .g,.list .g{color:var(--sub);font-size:12px;white-space:nowrap}
 .stu .s{margin-left:auto;font-size:12px;color:var(--accent);font-weight:700}
 .stu.unseated .s{color:var(--empty);font-weight:400}
 .stu.selected{border-color:var(--sel);box-shadow:0 0 0 2px var(--sel) inset}
@@ -98,7 +99,7 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
   .chart.flipped{grid-template-rows:repeat(5,1fr) auto}
   .vertical .seat .nm span{font-size:min(17pt, calc(94cqh / var(--n)), 85cqw)}
   .horizontal .seat .nm span{font-size:min(14pt, calc(96cqw / var(--n)), 60cqh)}
-  .seat .no{font-size:8pt}
+  .seat .gr{font-size:9pt}
   *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
 }
 </style>
@@ -145,8 +146,8 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
 <div class="modal noprint" id="mRoster">
   <div class="box">
     <h3>名簿を入れる</h3>
-    <div class="hint">1行に1人。「番号 名前」または名前だけ(番号は上から1, 2, 3…)。Excel の2列(番号・名前)をそのまま貼り付けても読めます。番号が同じ生徒の席はそのまま残ります。</div>
-    <textarea id="taRoster" placeholder="1 青木 一郎&#10;2 石川 花子&#10;3 上田 次郎"></textarea>
+    <div class="hint">1行に1人。「通し番号 学年 氏名」の順に入れてください。Excel の3列(通し番号・学年・氏名)をそのまま貼り付けても読めます。学年は「2」「2年」「中2」などで、数字だけなら「2年」と表示します。通し番号が同じ生徒の席はそのまま残ります。</div>
+    <textarea id="taRoster" placeholder="1 1 青木 一郎&#10;2 2 石川 花子&#10;3 3 上田 次郎"></textarea>
     <div class="row">
       <button id="rCancel">やめる</button>
       <button class="primary" id="rOk">読み込む</button>
@@ -158,7 +159,7 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
 <div class="modal noprint" id="mPick">
   <div class="box">
     <h3 id="pTitle">席</h3>
-    <input type="search" id="pSearch" placeholder="名前・番号でさがす">
+    <input type="search" id="pSearch" placeholder="名前・番号・学年でさがす">
     <div class="list" id="pList"></div>
     <div class="row">
       <button id="pClear">この席を空ける</button>
@@ -186,6 +187,8 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
   }
   function stuByNo(no){ for(var i=0;i<state.students.length;i++) if(state.students[i].no===no) return state.students[i]; return null; }
   function seatOf(no){ for(var k in state.seats) if(state.seats[k]===no) return k; return null; }
+  function gradeLabel(g){ return /^[0-9]+$/.test(g) ? g + "年" : g; }
+  function who(st){ return st.no + " " + (st.grade ? gradeLabel(st.grade) + " " : "") + st.name; }
   function seatLabel(k){ var p=k.split("-"); return p[0]+" の"+["左","中","右"][+p[1]-1]; }
 
   // 生徒を席へ。席にいた人は、入ってきた人の元の席へ入れ替わる
@@ -225,7 +228,7 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
           var no = state.seats[key], st = no ? stuByNo(no) : null;
           s.className = "seat" + (st ? "" : " empty");
           s.dataset.seat = key;
-          var n1 = document.createElement("div"); n1.className="no"; n1.textContent = st ? st.no : " ";
+          var n1 = document.createElement("div"); n1.className="gr"; n1.textContent = st && st.grade ? gradeLabel(st.grade) : " ";
           var n2 = document.createElement("div"); n2.className="nm";
           var sp = document.createElement("span");
           var text = st ? st.name : "空";
@@ -249,10 +252,11 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
       var b = document.createElement("div");
       b.className = "stu" + (k ? "" : " unseated") + (selected===st.no ? " selected" : "");
       b.dataset.no = st.no;
-      b.innerHTML = '<span class="n"></span><span class="m"></span><span class="s"></span>';
+      b.innerHTML = '<span class="n"></span><span class="g"></span><span class="m"></span><span class="s"></span>';
       b.children[0].textContent = st.no;
-      b.children[1].textContent = st.name;
-      b.children[2].textContent = k ? seatLabel(k) : "未定";
+      b.children[1].textContent = st.grade ? gradeLabel(st.grade) : "";
+      b.children[2].textContent = st.name;
+      b.children[3].textContent = k ? seatLabel(k) : "未定";
       ro.appendChild(b);
     });
     $("count").textContent = state.students.length
@@ -268,23 +272,30 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
   }
 
   // ---- 名簿の読み込み ----
+  // 1行 = 通し番号・学年・氏名。区切りはタブ(Excel)・カンマ・空白
+  var GRADE = /^(小|中|高)?[0-9一二三四五六]{1,2}年?生?$/;
+  function half(t){ return t.replace(/[０-９]/g, function(d){ return String.fromCharCode(d.charCodeAt(0) - 0xFEE0); }); }
   function parseRoster(text){
     var out = [], used = {}, auto = 1;
     text.split(/\r?\n/).forEach(function(line){
-      line = line.replace(/^\s+|\s+$/g, "");
+      line = line.trim();
       if(!line) return;
-      var m = line.match(/^(\d+)[\s,、\t.:]+(.+)$/);
-      var no, name;
-      if(m){ no = m[1]; name = m[2]; } else { no = String(auto); name = line; }
-      name = name.replace(/[\t,]+/g, " ").replace(/\s+/g, " ").trim();
+      var cols = /[\t,，]/.test(line) ? line.split(/\s*[\t,，]\s*/) : line.split(/\s+/);
+      cols = cols.filter(function(c){ return c !== ""; });
+      var no = null, grade = "";
+      if(cols.length > 1 && /^[0-9]+$/.test(half(cols[0]))) no = String(+half(cols.shift()));
+      if(cols.length > 1 && GRADE.test(half(cols[0]))) grade = half(cols.shift()).replace(/年?生?$/, "");
+      var name = cols.join(" ");
+      if(!name) return;
+      if(no === null) no = String(auto);
       while(used[no]) no = String(+no + 1);
       used[no] = true; auto = +no + 1;
-      out.push({ no:no, name:name });
+      out.push({ no:no, grade:grade, name:name });
     });
     return out;
   }
   $("btnRoster").onclick = function(){
-    $("taRoster").value = state.students.map(function(s){ return s.no + " " + s.name; }).join("\n");
+    $("taRoster").value = state.students.map(function(s){ return [s.no, s.grade || "", s.name].join("\t"); }).join("\n");
     $("mRoster").classList.add("open");
   };
   $("rCancel").onclick = function(){ $("mRoster").classList.remove("open"); };
@@ -315,7 +326,7 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
   function openPicker(seat){
     picking = seat;
     var cur = state.seats[seat], st = cur ? stuByNo(cur) : null;
-    $("pTitle").textContent = seatLabel(seat) + (st ? "(いま:" + st.no + " " + st.name + ")" : "(空き)");
+    $("pTitle").textContent = seatLabel(seat) + (st ? "(いま:" + who(st) + ")" : "(空き)");
     $("pSearch").value = "";
     fillPick("");
     $("mPick").classList.add("open");
@@ -327,14 +338,15 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
       return fa-fb || (+a.no)-(+b.no);
     });
     arr.forEach(function(st){
-      if(q && (st.name + " " + st.no).indexOf(q) < 0) return;
+      if(q && who(st).indexOf(q) < 0) return;
       var k = seatOf(st.no);
       var b = document.createElement("button");
       b.className = k ? "" : "free";
-      b.innerHTML = '<span></span><span></span><span class="s"></span>';
+      b.innerHTML = '<span></span><span class="g"></span><span></span><span class="s"></span>';
       b.children[0].textContent = st.no;
-      b.children[1].textContent = st.name;
-      b.children[2].textContent = k ? seatLabel(k) + "(入れ替え)" : "未定";
+      b.children[1].textContent = st.grade ? gradeLabel(st.grade) : "";
+      b.children[2].textContent = st.name;
+      b.children[3].textContent = k ? seatLabel(k) + "(入れ替え)" : "未定";
       b.onclick = function(){ $("mPick").classList.remove("open"); assign(picking, st.no); };
       list.appendChild(b);
     });
