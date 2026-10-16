@@ -146,7 +146,7 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
 <div class="modal noprint" id="mRoster">
   <div class="box">
     <h3>名簿を入れる</h3>
-    <div class="hint">1行に1人。「通し番号 学年 氏名」の順に入れてください。Excel の3列(通し番号・学年・氏名)をそのまま貼り付けても読めます。学年は「2」「2年」「中2」などで、数字だけなら「2年」と表示します。通し番号が同じ生徒の席はそのまま残ります。</div>
+    <div class="hint">1行に1人。「通し番号 学年 氏名」の順に入れてください。Excel の3列(通し番号・学年・氏名)をそのまま貼り付けても読めます。学年は数字だけで入れてください(席には「2年」のように表示します)。通し番号が同じ生徒の席はそのまま残ります。</div>
     <textarea id="taRoster" placeholder="1 1 青木 一郎&#10;2 2 石川 花子&#10;3 3 上田 次郎"></textarea>
     <div class="row">
       <button id="rCancel">やめる</button>
@@ -273,7 +273,7 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
 
   // ---- 名簿の読み込み ----
   // 1行 = 通し番号・学年・氏名。区切りはタブ(Excel)・カンマ・空白
-  var GRADE = /^(小|中|高)?[0-9一二三四五六]{1,2}年?生?$/;
+  var GRADE = /^[0-9]{1,2}$/;
   function half(t){ return t.replace(/[０-９]/g, function(d){ return String.fromCharCode(d.charCodeAt(0) - 0xFEE0); }); }
   function parseRoster(text){
     var out = [], used = {}, auto = 1;
@@ -284,7 +284,7 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
       cols = cols.filter(function(c){ return c !== ""; });
       var no = null, grade = "";
       if(cols.length > 1 && /^[0-9]+$/.test(half(cols[0]))) no = String(+half(cols.shift()));
-      if(cols.length > 1 && GRADE.test(half(cols[0]))) grade = half(cols.shift()).replace(/年?生?$/, "");
+      if(cols.length > 1 && GRADE.test(half(cols[0]))) grade = String(+half(cols.shift()));
       var name = cols.join(" ");
       if(!name) return;
       if(no === null) no = String(auto);
