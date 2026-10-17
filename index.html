@@ -142,6 +142,7 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
     <div class="hint">生徒をタップして選び、座席表の席をタップすると、その席に入ります。席を先にタップして、一覧から選ぶこともできます。</div>
     <div class="roster" id="roster"></div>
   </div>
+  <div class="hint noprint" style="text-align:right">版 2026-10-17</div>
 </div>
 
 <!-- 名簿の入力 -->
@@ -403,6 +404,11 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
 
   if(!state.date){ var d = new Date(); state.date = d.getFullYear()+"年"+(d.getMonth()+1)+"月"+d.getDate()+"日"; }
   load(); render();
+
+  // 公開ページでは、いつもネットから最新を取りに行く(sw.js)
+  if("serviceWorker" in navigator && location.protocol === "https:"){
+    try{ navigator.serviceWorker.register("sw.js"); }catch(e){}
+  }
 })();
 </script>
 </body>
