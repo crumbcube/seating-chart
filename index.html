@@ -27,6 +27,7 @@ body{background:var(--bg);color:var(--ink);font-family:"Hiragino Sans","Noto San
 button,input,textarea,select{font:inherit;color:inherit}
 button{cursor:pointer;border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:8px 12px}
 button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+button:disabled{opacity:.45;cursor:default}
 .wrap{max-width:1100px;margin:0 auto;padding:12px 16px 40px}
 .toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px}
 .toolbar .spacer{flex:1}
@@ -44,9 +45,12 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
 .chart{display:grid;grid-template-columns:repeat(4,1fr);column-gap:14px;row-gap:10px;
   grid-template-rows:auto repeat(5,minmax(96px,auto))}
 .chart.flipped{grid-template-rows:repeat(5,minmax(96px,auto)) auto}
-.teacher{grid-column:2 / span 2;justify-self:center;border:2px solid #333;border-radius:4px;padding:4px 32px;font-weight:700;letter-spacing:.3em}
+.teacher{grid-column:1 / -1;justify-self:center;width:60%;text-align:center;border:2px solid #333;border-radius:4px;padding:4px 0;font-weight:700;letter-spacing:.2em}
 .desk{border:2px solid #2b3a4f;border-radius:4px;display:flex;flex-direction:column;background:#fff}
-.desk .dname{font-size:12px;font-weight:700;text-align:center;border-bottom:1px solid #2b3a4f;background:#eef3fa;line-height:1.5}
+.desk .dname{font-size:12px;font-weight:700;text-align:center;border-bottom:1px solid #2b3a4f;background:#eef3fa;line-height:1.5;cursor:pointer}
+.desk.dsel{outline:3px solid #f5b301;outline-offset:1px}
+.desk.dsel .dname{background:#f5b301}
+.chart.swapping .desk:not(.dsel){background:#fff6d6}
 .desk .seats{flex:1;display:grid;grid-template-columns:repeat(3,1fr)}
 .seat{position:relative;border-left:1px solid #9fb0c6;display:flex;flex-direction:column;align-items:center;padding:2px 1px;min-width:0;cursor:pointer}
 .seat:first-child{border-left:none}
@@ -112,6 +116,7 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
   <div class="toolbar noprint">
     <button class="primary" id="btnRoster">名簿を入れる</button>
     <button id="btnPrint">印刷(A4)</button>
+    <button id="btnUndo" disabled>↶ 元に戻す</button>
     <label>用紙
       <select id="optPaper"><option value="portrait">A4 縦</option><option value="landscape">A4 横</option></select>
     </label>
@@ -119,7 +124,7 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
       <select id="optWrite"><option value="vertical">縦書き</option><option value="horizontal">横書き</option></select>
     </label>
     <label>向き
-      <select id="optFlip"><option value="0">教卓が上</option><option value="1">教卓が下(先生から見た図)</option></select>
+      <select id="optFlip"><option value="0">ホワイトボードが上</option><option value="1">ホワイトボードが下(先生から見た図)</option></select>
     </label>
     <span class="spacer"></span>
     <button id="btnSave">控えを保存</button>
@@ -139,10 +144,10 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
 
   <div class="panel noprint">
     <h2>名簿 <span class="status" id="count"></span></h2>
-    <div class="hint">生徒をタップして選び、座席表の席をタップすると、その席に入ります。席を先にタップして、一覧から選ぶこともできます。</div>
+    <div class="hint">生徒をタップして選び、座席表の席をタップすると、その席に入ります。席を先にタップして、一覧から選ぶこともできます。机の名前(A1 など)をタップしてから別の机をタップすると、3人まとめて入れ替わります。まちがえたときは「元に戻す」を押してください。</div>
     <div class="roster" id="roster"></div>
   </div>
-  <div class="hint noprint" style="text-align:right">版 2026-10-17</div>
+  <div class="hint noprint" style="text-align:right">版 2026-10-21</div>
 </div>
 
 <!-- 名簿の入力 -->
@@ -182,6 +187,28 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
                 paper:"portrait", write:"vertical", flip:"0" };
   var selected = null;   // 選択中の生徒番号
   var picking = null;    // 生徒を選んでいる席
+  var deskSel = null;    // 入れ替え元に選んだ机(例 "B3")
+  var history = [];      // 席の変更前の写し(元に戻す用)
+
+  function remember(){
+    history.push(JSON.stringify(state.seats));
+    if(history.length > 100) history.shift();
+  }
+  function undo(){
+    if(!history.length) return;
+    state.seats = JSON.parse(history.pop());
+    selected = null; deskSel = null; save(); render();
+  }
+  // 机ごと3人を入れ替える(左は左、中は中、右は右へ)
+  function swapDesks(a, b){
+    remember();
+    for(var p=1;p<=3;p++){
+      var ka = a + "-" + p, kb = b + "-" + p, va = state.seats[ka], vb = state.seats[kb];
+      if(vb) state.seats[ka] = vb; else delete state.seats[ka];
+      if(va) state.seats[kb] = va; else delete state.seats[kb];
+    }
+    save(); render();
+  }
 
   function $(id){ return document.getElementById(id); }
   function save(){ try{ localStorage.setItem(KEY, JSON.stringify(state)); }catch(e){} }
@@ -198,6 +225,7 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
   function assign(seat, no){
     var from = seatOf(no), prev = state.seats[seat];
     if(from===seat) return;
+    remember();
     if(from) delete state.seats[from];
     state.seats[seat] = no;
     if(prev && from) state.seats[from] = prev;
@@ -210,15 +238,17 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
     chart.className = "chart " + state.write;
     chart.innerHTML = "";
     var t = document.createElement("div");
-    t.className = "teacher"; t.textContent = "教卓";
+    t.className = "teacher"; t.textContent = "ホワイトボード";
     t.style.gridRow = flip ? 6 : 1;
     chart.classList.toggle("flipped", flip);
+    chart.classList.toggle("swapping", !!deskSel);
     chart.appendChild(t);
 
     COLS.forEach(function(c, ci){
       for(var r=1;r<=DESKS[c];r++){
         var d = document.createElement("div");
-        d.className = "desk";
+        d.className = "desk" + (deskSel === c + r ? " dsel" : "");
+        d.dataset.desk = c + r;
         d.style.gridColumn = (flip ? 4-ci : ci+1);
         d.style.gridRow = flip ? (6-r) : (r+1);
         var nm = document.createElement("div");
@@ -262,6 +292,7 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
       b.children[3].textContent = k ? seatLabel(k) : "未定";
       ro.appendChild(b);
     });
+    $("btnUndo").disabled = !history.length;
     $("count").textContent = state.students.length
       ? "(" + state.students.length + "人中 " + seated + "人の席が決まっています)"
       : "(まだ名簿がありません)";
@@ -305,6 +336,7 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
   $("rOk").onclick = function(){
     var list = parseRoster($("taRoster").value);
     if(list.length > 54 && !confirm(list.length + "人います。席は54席です。このまま読み込みますか?")) return;
+    remember();
     state.students = list;
     var nos = {}; list.forEach(function(s){ nos[s.no]=1; });
     for(var k in state.seats) if(!nos[state.seats[k]]) delete state.seats[k];
@@ -316,11 +348,21 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
   $("roster").addEventListener("click", function(e){
     var b = e.target.closest(".stu"); if(!b) return;
     selected = (selected===b.dataset.no) ? null : b.dataset.no;
+    deskSel = null;
     render();
   });
 
   // ---- 席をタップ ----
   $("chart").addEventListener("click", function(e){
+    var dn = e.target.closest(".dname"), dk = e.target.closest(".desk");
+    if(dn || (deskSel && dk)){
+      var desk = dk.dataset.desk;
+      selected = null;
+      if(deskSel === desk) deskSel = null;
+      else if(deskSel){ var from = deskSel; deskSel = null; swapDesks(from, desk); return; }
+      else deskSel = desk;
+      render(); return;
+    }
     var s = e.target.closest(".seat"); if(!s) return;
     if(selected){ var no = selected; selected = null; assign(s.dataset.seat, no); return; }
     openPicker(s.dataset.seat);
@@ -356,7 +398,7 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
     if(!state.students.length) list.innerHTML = '<div class="hint" style="padding:10px">先に「名簿を入れる」から名簿を入れてください。</div>';
   }
   $("pSearch").oninput = function(){ fillPick(this.value.trim()); };
-  $("pClear").onclick = function(){ delete state.seats[picking]; save(); render(); $("mPick").classList.remove("open"); };
+  $("pClear").onclick = function(){ if(state.seats[picking]) remember(); delete state.seats[picking]; save(); render(); $("mPick").classList.remove("open"); };
   $("pCancel").onclick = function(){ $("mPick").classList.remove("open"); };
   document.querySelectorAll(".modal").forEach(function(m){
     m.addEventListener("click", function(e){ if(e.target===m) m.classList.remove("open"); });
@@ -372,12 +414,12 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
   $("optWrite").onchange = function(){ state.write = this.value; save(); render(); };
   $("optFlip").onchange  = function(){ state.flip  = this.value; save(); render(); };
   $("btnPrint").onclick = function(){
-    selected = null; render();
+    selected = null; deskSel = null; render();
     if(window.AndroidApp) AndroidApp.print(state.paper, state.title + (state.klass ? " " + state.klass : ""));
     else window.print();
   };
   $("btnClear").onclick = function(){
-    if(confirm("すべての席を空けます。名簿は残ります。よろしいですか?")){ state.seats = {}; save(); render(); }
+    if(confirm("すべての席を空けます。名簿は残ります。よろしいですか?")){ remember(); state.seats = {}; save(); render(); }
   };
 
   // ---- 控え(ファイル)の保存と読み込み ----
@@ -391,12 +433,13 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(function(){ URL.revokeObjectURL(a.href); }, 2000);
   };
+  $("btnUndo").onclick = undo;
   $("btnLoad").onclick = function(){ $("fileIn").click(); };
   $("fileIn").onchange = function(){
     var f = this.files[0]; if(!f) return;
     var rd = new FileReader();
     rd.onload = function(){
-      try{ var s = JSON.parse(rd.result); if(!s.students) throw 0; state = Object.assign(state, s); selected=null; save(); render(); }
+      try{ var s = JSON.parse(rd.result); if(!s.students) throw 0; remember(); state = Object.assign(state, s); selected=null; deskSel=null; save(); render(); }
       catch(e){ alert("この控えは読めませんでした。"); }
     };
     rd.readAsText(f); this.value = "";
