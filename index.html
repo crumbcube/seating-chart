@@ -147,14 +147,14 @@ button:disabled{opacity:.45;cursor:default}
     <div class="hint">生徒をタップして選び、座席表の席をタップすると、その席に入ります。席を先にタップして、一覧から選ぶこともできます。机の名前(A1 など)をタップしてから別の机をタップすると、3人まとめて入れ替わります。まちがえたときは「元に戻す」を押してください。</div>
     <div class="roster" id="roster"></div>
   </div>
-  <div class="hint noprint" style="text-align:right">版 2026-10-21</div>
+  <div class="hint noprint" style="text-align:right">版 2026-10-31</div>
 </div>
 
 <!-- 名簿の入力 -->
 <div class="modal noprint" id="mRoster">
   <div class="box">
     <h3>名簿を入れる</h3>
-    <div class="hint">1行に1人。「通し番号 学年 氏名」の順に入れてください。Excel の3列(通し番号・学年・氏名)をそのまま貼り付けても読めます。学年は数字だけで入れてください(席には「2年」のように表示します)。通し番号が同じ生徒の席はそのまま残ります。</div>
+    <div class="hint">1行に1人。「通し番号 学年 氏名」の順に入れてください。Excel の3列(通し番号・学年・氏名)をそのまま貼り付けても読めます。学年は数字だけで入れてください(席には「2年」のように表示します)。生徒を足したり消したりしても、ほかの生徒の席はそのまま残ります(通し番号を付け直してもかまいません)。</div>
     <textarea id="taRoster" placeholder="1 1 青木 一郎&#10;2 2 石川 花子&#10;3 3 上田 次郎"></textarea>
     <div class="row">
       <button id="rCancel">やめる</button>
@@ -191,12 +191,13 @@ button:disabled{opacity:.45;cursor:default}
   var history = [];      // 席の変更前の写し(元に戻す用)
 
   function remember(){
-    history.push(JSON.stringify(state.seats));
+    history.push(JSON.stringify({ seats:state.seats, students:state.students }));
     if(history.length > 100) history.shift();
   }
   function undo(){
     if(!history.length) return;
-    state.seats = JSON.parse(history.pop());
+    var h = JSON.parse(history.pop());
+    state.seats = h.seats; state.students = h.students;
     selected = null; deskSel = null; save(); render();
   }
   // 机ごと3人を入れ替える(左は左、中は中、右は右へ)
@@ -333,15 +334,51 @@ button:disabled{opacity:.45;cursor:default}
     $("mRoster").classList.add("open");
   };
   $("rCancel").onclick = function(){ $("mRoster").classList.remove("open"); };
+  // 名簿を入れ直しても、同じ生徒の席はそのまま引き継ぐ。
+  // 通し番号が付け直されても困らないよう、氏名(+学年)で同じ人を探す。
+  // 氏名を書き直したときのために、最後に「同じ通し番号で、元の氏名が新しい名簿にない人」も同じ人とみなす。
+  function carrySeats(oldList, newList){
+    var seatByNo = {};
+    for(var k in state.seats) seatByNo[state.seats[k]] = k;
+    var used = {}, match = new Array(newList.length);
+    function find(test){
+      for(var i=0;i<oldList.length;i++) if(!used[i] && test(oldList[i])) return i;
+      return -1;
+    }
+    newList.forEach(function(n, j){
+      var i = find(function(o){ return o.name === n.name && (o.grade||"") === (n.grade||""); });
+      if(i < 0) i = find(function(o){ return o.name === n.name; });
+      if(i >= 0){ used[i] = true; match[j] = i; }
+    });
+    var newNames = {}; newList.forEach(function(n){ newNames[n.name] = 1; });
+    newList.forEach(function(n, j){
+      if(match[j] !== undefined) return;
+      var i = find(function(o){ return o.no === n.no && !newNames[o.name]; });
+      if(i >= 0){ used[i] = true; match[j] = i; }
+    });
+    var seats = {}, kept = 0, added = 0, removed = 0;
+    newList.forEach(function(n, j){
+      if(match[j] === undefined){ added++; return; }
+      var k = seatByNo[oldList[match[j]].no];
+      if(k){ seats[k] = n.no; kept++; }
+    });
+    oldList.forEach(function(o, i){ if(!used[i]) removed++; });
+    return { seats:seats, kept:kept, added:added, removed:removed };
+  }
+
   $("rOk").onclick = function(){
     var list = parseRoster($("taRoster").value);
     if(list.length > 54 && !confirm(list.length + "人います。席は54席です。このまま読み込みますか?")) return;
     remember();
+    var r = carrySeats(state.students, list);
     state.students = list;
-    var nos = {}; list.forEach(function(s){ nos[s.no]=1; });
-    for(var k in state.seats) if(!nos[state.seats[k]]) delete state.seats[k];
-    selected = null; save(); render();
+    state.seats = r.seats;
+    selected = null; deskSel = null; save(); render();
     $("mRoster").classList.remove("open");
+    if(r.added || r.removed)
+      alert("名簿を読み込みました。\n席をそのまま引き継いだ人: " + r.kept + "人" +
+            (r.added ? "\n新しく入った人(席は未定): " + r.added + "人" : "") +
+            (r.removed ? "\n名簿から外れた人(席を空けました): " + r.removed + "人" : ""));
   };
 
   // ---- 名簿の生徒をタップ ----
